@@ -3,6 +3,8 @@
 #include "memlayout.h"
 #include "elf.h"
 #include "riscv.h"
+#include "spinlock.h"
+#include "proc.h"
 #include "defs.h"
 #include "fs.h"
 
@@ -21,6 +23,7 @@ extern char trampoline[]; // trampoline.S
 void
 kvminit()
 {
+  // rsic-v64 RV39 的分页方式是, 一个 pagetable 里包含 512 个 pte, 4k=4096, 4096/512=8, 8个byte就是 8*8=64bit;
   kernel_pagetable = (pagetable_t) kalloc();
   memset(kernel_pagetable, 0, PGSIZE);
 
@@ -52,8 +55,8 @@ kvminit()
 void
 kvminithart()
 {
-  w_satp(MAKE_SATP(kernel_pagetable));
-  sfence_vma();
+  w_satp(MAKE_SATP(kernel_pagetable)); // enable h/w page table translate
+  sfence_vma(); // flush TLB
 }
 
 // Return the address of the PTE in page table pagetable
@@ -131,8 +134,10 @@ kvmpa(uint64 va)
   uint64 off = va % PGSIZE;
   pte_t *pte;
   uint64 pa;
+  struct proc *p = myproc();
   
-  pte = walk(kernel_pagetable, va, 0);
+//  pte = walk(kernel_pagetable, va, 0);
+  pte = walk(p->k_pagetable, va, 0);
   if(pte == 0)
     panic("kvmpa");
   if((*pte & PTE_V) == 0)
@@ -463,4 +468,77 @@ vmprint(pagetable_t pagetable, int root_flags)
       printf("%d: pte %p pa %p\n", i, pte, PTE2PA(pte));
     }
   }
+}
+
+/*
+ * create kernel page table for each process which callin kernel
+ */
+pagetable_t
+u_kvminit(void)
+{
+  pagetable_t user_kpagetable = (pagetable_t) kalloc();
+  if(!user_kpagetable)
+    goto bad;
+  memset(user_kpagetable, 0, PGSIZE);
+
+  // uart registers
+  if(u_kvmmap(user_kpagetable, UART0, UART0, PGSIZE, PTE_R | PTE_W) != 0)
+    goto bad;
+
+  // virtio mmio disk interface
+  if(u_kvmmap(user_kpagetable, VIRTIO0, VIRTIO0, PGSIZE, PTE_R | PTE_W) != 0)
+    goto bad;
+
+  // CLINT
+  if(u_kvmmap(user_kpagetable, CLINT, CLINT, 0x10000, PTE_R | PTE_W) != 0)
+    goto bad;
+
+  // PLIC
+  if(u_kvmmap(user_kpagetable, PLIC, PLIC, 0x400000, PTE_R | PTE_W) != 0)
+    goto bad;
+
+  // map kernel text executable and read-only.
+  if(u_kvmmap(user_kpagetable, KERNBASE, KERNBASE, (uint64)etext-KERNBASE, PTE_R | PTE_X) != 0)
+    goto bad;
+
+  // map kernel data and the physical RAM we'll make use of.
+  if(u_kvmmap(user_kpagetable, (uint64)etext, (uint64)etext, PHYSTOP-(uint64)etext, PTE_R | PTE_W) != 0)
+    goto bad;
+
+  // map the trampoline for trap entry/exit to
+  // the highest virtual address in the kernel.
+  if(u_kvmmap(user_kpagetable, TRAMPOLINE, (uint64)trampoline, PGSIZE, PTE_R | PTE_X) != 0)
+    goto bad;
+
+  return user_kpagetable;
+
+bad:
+  return 0;
+}
+
+int
+u_kvmmap(pagetable_t pagetable, uint64 va, uint64 pa, uint64 sz, int perm)
+{
+  if(mappages(pagetable, va, sz, pa, perm) != 0)
+    return -1;
+  else
+    return 0;
+}
+
+// Free process's kernel pagetable, but without also freeing the leaf physical memory pages.
+// Because they have the same mapping between each process now.
+void
+u_freewalk(pagetable_t root_pagetable)
+{
+  // there are 2^9 = 512 PTEs in a page table.
+  for(int i = 0; i < 512; i++){
+    pte_t pte = root_pagetable[i];
+    if((pte & PTE_V) && (pte & (PTE_R|PTE_W|PTE_X)) == 0){
+      // this PTE points to a lower-level page table.
+      uint64 child = PTE2PA(pte);
+      u_freewalk((pagetable_t)child);
+      root_pagetable[i] = 0;
+    }
+  }
+  kfree((void*)root_pagetable);
 }
