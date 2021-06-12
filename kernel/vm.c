@@ -231,7 +231,7 @@ uvminit(pagetable_t pagetable, uchar *src, uint sz)
 // Allocate PTEs and physical memory to grow process from oldsz to
 // newsz, which need not be page aligned.  Returns new size or 0 on error.
 uint64
-uvmalloc(pagetable_t pagetable, uint64 oldsz, uint64 newsz)
+uvmalloc(pagetable_t pagetable, pagetable_t k_pagetable, uint64 oldsz, uint64 newsz)
 {
   char *mem;
   uint64 a;
@@ -243,15 +243,24 @@ uvmalloc(pagetable_t pagetable, uint64 oldsz, uint64 newsz)
   for(a = oldsz; a < newsz; a += PGSIZE){
     mem = kalloc();
     if(mem == 0){
-      uvmdealloc(pagetable, a, oldsz);
+      uvmdealloc(pagetable, k_pagetable, a, oldsz);
       return 0;
     }
     memset(mem, 0, PGSIZE);
     if(mappages(pagetable, a, PGSIZE, (uint64)mem, PTE_W|PTE_X|PTE_R|PTE_U) != 0){
       kfree(mem);
-      uvmdealloc(pagetable, a, oldsz);
+      uvmdealloc(pagetable, k_pagetable, a, oldsz);
       return 0;
     }
+#if 1
+    if(k_pagetable){
+      if(mappages(k_pagetable, a, PGSIZE, (uint64)mem, PTE_W|PTE_X|PTE_R) != 0){
+        kfree(mem);
+        uvmdealloc(pagetable, k_pagetable, a, oldsz);
+        return 0;
+      }
+    }
+#endif
   }
   return newsz;
 }
@@ -261,7 +270,7 @@ uvmalloc(pagetable_t pagetable, uint64 oldsz, uint64 newsz)
 // need to be less than oldsz.  oldsz can be larger than the actual
 // process size.  Returns the new process size.
 uint64
-uvmdealloc(pagetable_t pagetable, uint64 oldsz, uint64 newsz)
+uvmdealloc(pagetable_t pagetable, pagetable_t k_pagetable, uint64 oldsz, uint64 newsz)
 {
   if(newsz >= oldsz)
     return oldsz;
@@ -269,6 +278,10 @@ uvmdealloc(pagetable_t pagetable, uint64 oldsz, uint64 newsz)
   if(PGROUNDUP(newsz) < PGROUNDUP(oldsz)){
     int npages = (PGROUNDUP(oldsz) - PGROUNDUP(newsz)) / PGSIZE;
     uvmunmap(pagetable, PGROUNDUP(newsz), npages, 1);
+#if 1
+    if(k_pagetable)
+      uvmunmap(k_pagetable, PGROUNDUP(newsz), npages, 0);
+#endif
   }
 
   return newsz;
@@ -384,6 +397,7 @@ copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len)
 int
 copyin(pagetable_t pagetable, char *dst, uint64 srcva, uint64 len)
 {
+#if 0
   uint64 n, va0, pa0;
 
   while(len > 0){
@@ -401,6 +415,8 @@ copyin(pagetable_t pagetable, char *dst, uint64 srcva, uint64 len)
     srcva = va0 + PGSIZE;
   }
   return 0;
+#endif
+  return copyin_new(pagetable, dst, srcva, len);
 }
 
 // Copy a null-terminated string from user to kernel.
@@ -410,6 +426,7 @@ copyin(pagetable_t pagetable, char *dst, uint64 srcva, uint64 len)
 int
 copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
 {
+#if 0
   uint64 n, va0, pa0;
   int got_null = 0;
 
@@ -444,6 +461,8 @@ copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
   } else {
     return -1;
   }
+#endif
+  return copyinstr_new(pagetable, dst, srcva, max);
 }
 
 void
@@ -488,11 +507,11 @@ u_kvminit(void)
   // virtio mmio disk interface
   if(u_kvmmap(user_kpagetable, VIRTIO0, VIRTIO0, PGSIZE, PTE_R | PTE_W) != 0)
     goto bad;
-
+#if 0
   // CLINT
   if(u_kvmmap(user_kpagetable, CLINT, CLINT, 0x10000, PTE_R | PTE_W) != 0)
     goto bad;
-
+#endif
   // PLIC
   if(u_kvmmap(user_kpagetable, PLIC, PLIC, 0x400000, PTE_R | PTE_W) != 0)
     goto bad;
@@ -541,4 +560,30 @@ u_freewalk(pagetable_t root_pagetable)
     }
   }
   kfree((void*)root_pagetable);
+}
+
+int
+uvm_to_kvmcopy(pagetable_t uvm, pagetable_t kvm, uint64 sz)
+{
+  pte_t *pte;
+  uint64 pa, i;
+  uint flags;
+
+  for(i = 0; i < sz; i += PGSIZE){
+    if((pte = walk(uvm, i, 0)) == 0)
+      panic("uvm_to_kvmcopy: pte should exist");
+    if((*pte & PTE_V) == 0)
+      panic("uvm_to_kvmcopy: page not present");
+    pa = PTE2PA(*pte);
+    flags = PTE_FLAGS(*pte);
+    flags &= ~PTE_U;
+    if(mappages(kvm, i, PGSIZE, (uint64)pa, flags) != 0){
+      goto err;
+    }
+  }
+  return 0;
+
+ err:
+  uvmunmap(kvm, 0, i / PGSIZE, 0);
+  return -1;
 }
