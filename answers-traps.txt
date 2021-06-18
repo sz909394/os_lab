@@ -1,0 +1,36 @@
+1. Which registers contain arguments to functions? For example, which register holds 13 in main's call to printf?
+a0-a7 register contain arguments to functions, in main's call to printf, a1 contains 13
+
+2. Where is the call to function f in the assembly code for main? Where is the call to g ?
+从代码可以看出，这两个都被内联优化处理了。main中的f调用直接使用了结果12，而f中的函数g调用直接内联在f中了??? 这样写也可以？ 但还是不明白
+内联的执行原理和规则.
+
+3. At what address is the function printf located?
+--- 0000000000000630 <printf>
+
+4. What value is in the register ra just after the jalr to printf in main ?
+--- 0x38
+
+5.
+5.1 The output depends on that fact that the RISC-V is little-endian. If the RISC-V were 
+instead big-endian what would you set i to in order to yield the same output?
+--- If the RISC-V were instead big-endian i need to set i to 0x726c6400 
+
+对于 unsigned int i = 0x00646c72;
+little-endian 时的保存方式： 
+(gdb) x/4c $a2
+0x2fcc: 114 'r' 108 'l' 100 'd' 0 '\000'
+(gdb) x/4x $a2
+0x2fcc: 0x72    0x6c    0x64    0x00
+
+big-endian 时的保存方式：
+(gdb) x/4c $a2
+0x2fcc: 0 '\000' 100 'd' 108 'l' 114 'r'
+(gdb) x/4x $a2
+0x2fcc: 0x00    0x64    0x6c    0x72
+
+5.2 Would you need to change 57616 to a different value? 
+--- NO, i don't need to change 57616.
+
+5.3 what is going to be printed after 'y=' ?
+--- it would print register a2's value;
