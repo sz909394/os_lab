@@ -76,6 +76,26 @@ usertrap(void)
   if(p->killed)
     exit(-1);
 
+  if(which_dev == 2)
+  {
+    if((p->alarm_interval > 0) && (p->alarm_locked != 1))
+    {
+      p->alarm_ticks_accu += 1;
+      if(p->alarm_ticks_accu > p->alarm_interval)
+      {
+        p->alarm_locked = 1;
+        p->alarm_ticks_accu = 0;
+        p->alarm_saved_reg[0] = p->trapframe->epc;
+        int reg_index = 1;
+        while(reg_index <= 31)
+        {
+          p->alarm_saved_reg[reg_index] = ((uint64 *)p->trapframe)[reg_index+4];
+          reg_index += 1;
+        }
+        p->trapframe->epc = (uint64) p->alarm_handler;
+      }
+    }
+  }
   // give up the CPU if this is a timer interrupt.
   if(which_dev == 2)
     yield();
