@@ -141,7 +141,7 @@ backtrace(void)
   uint64 down_limit = PGROUNDDOWN(fp);
   do{
     uint64 ra = *(uint64 *)(fp - 8);
-    printf("%p\n", (ra-4));
+    printf("%p\n", (ra-2)); // rsic-v 指令不一定是 32bit 的，但一定要是 16bit 对齐的，所以 ra-2 肯定是上一条指令的范围.
     fp = *(uint64 *)(fp - 16);
   }
   while(fp > down_limit && fp < up_limit);
