@@ -69,25 +69,34 @@ usertrap(void)
     // ok
   } else {
     int page_fault_handle = 0;
+
     if(r_scause() == 13 || r_scause() == 15)
     {
       uint64 va = r_stval();
-      uint64 va_align_down = PGROUNDDOWN(va);
-      char *mem = kalloc();
-      if(mem != 0)
-      {
-        memset(mem, 0, PGSIZE);
-        if(mappages(p->pagetable, va_align_down, PGSIZE, (uint64)mem, PTE_W|PTE_X|PTE_R|PTE_U) != 0){
-          kfree(mem);
+      uint64 sp_base = PGROUNDDOWN(r_sp());
+      uint64 sp_guard_base = sp_base - PGSIZE;
+
+      if((sp_guard_base <= va) && (va < sp_base)){}
+      else{
+        if(va <= p->sz){
+          uint64 va_align_down = PGROUNDDOWN(va);
+          char *mem = kalloc();
+          if(mem != 0)
+          {
+            memset(mem, 0, PGSIZE);
+            if(mappages(p->pagetable, va_align_down, PGSIZE, (uint64)mem, PTE_W|PTE_X|PTE_R|PTE_U) != 0){
+              kfree(mem);
+            }
+            else { page_fault_handle = 1;}
+          }
         }
-        else { page_fault_handle = 1;}
       }
     }
 
     if(page_fault_handle != 1){
-    printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
-    printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
-    p->killed = 1;
+      printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
+      printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
+      p->killed = 1;
     }
   }
 
@@ -162,9 +171,37 @@ kerneltrap()
     panic("kerneltrap: interrupts enabled");
 
   if((which_dev = devintr()) == 0){
-    printf("scause %p\n", scause);
-    printf("sepc=%p stval=%p\n", r_sepc(), r_stval());
-    panic("kerneltrap");
+    struct proc *p = myproc();
+    int k_page_fault_handle = 0;
+
+    if(r_scause() == 13 || r_scause() == 15)
+    {
+      uint64 va = r_stval();
+      uint64 sp_base = PGROUNDDOWN(p->trapframe->sp);
+      uint64 sp_guard_base = sp_base - PGSIZE;
+
+      if((sp_guard_base <= va) && (va < sp_base)){}
+      else{
+        if(va <= p->sz){
+          uint64 va_align_down = PGROUNDDOWN(va);
+          char *mem = kalloc();
+          if(mem != 0)
+          {
+            memset(mem, 0, PGSIZE);
+            if(mappages(p->pagetable, va_align_down, PGSIZE, (uint64)mem, PTE_W|PTE_X|PTE_R|PTE_U) != 0){
+              kfree(mem);
+            }
+            else { k_page_fault_handle = 1;}
+          }
+       }
+      }
+    }
+
+    if(k_page_fault_handle != 1){
+      printf("scause %p\n", scause);
+      printf("sepc=%p stval=%p\n", r_sepc(), r_stval());
+      panic("kerneltrap");
+    }
   }
 
   // give up the CPU if this is a timer interrupt.
