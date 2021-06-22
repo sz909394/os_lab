@@ -3,6 +3,8 @@
 #include "memlayout.h"
 #include "elf.h"
 #include "riscv.h"
+#include "spinlock.h"
+#include "proc.h"
 #include "defs.h"
 #include "fs.h"
 
@@ -109,6 +111,56 @@ walkaddr(pagetable_t pagetable, uint64 va)
     return 0;
   pa = PTE2PA(*pte);
   return pa;
+}
+
+uint64
+page_fault_walkaddr(pagetable_t pagetable, uint64 va, uint64 print_flags)
+{
+  pte_t *pte;
+  uint64 pa;
+  struct proc *p = myproc();
+
+  if(va >= MAXVA)
+    return 0;
+
+//  if(print_flags) {printf("%s, %d, va is %p\n",__func__,__LINE__, va);}
+
+  pte = walk(pagetable, va, 0);
+  if((pte != 0) && (*pte & PTE_V) != 0)
+  {
+//    if(print_flags) {printf("%s, %d\n",__func__,__LINE__);}
+    if((*pte & PTE_U) == 0)
+     return 0;
+//    if(print_flags) {printf("%s, %d\n",__func__,__LINE__);}
+    pa = PTE2PA(*pte);
+    return pa;
+  }
+//  if((pte == 0) || (*pte & PTE_V) == 0)){
+  else{
+//    if(print_flags) {printf("%s, %d\n",__func__,__LINE__);}
+    uint64 sp_base = PGROUNDDOWN(p->trapframe->sp);
+    uint64 sp_guard_base = sp_base - PGSIZE;
+    
+    if((sp_guard_base <= va) && (va < sp_base)) { return 0; }
+    if(va >= p->sz) { return 0; }
+    
+//    if(print_flags) {printf("%s, %d\n",__func__,__LINE__);}
+    pa = (uint64) kalloc();
+    if(pa == 0)
+      return 0;
+    memset((void *)pa, 0, PGSIZE);
+
+//    if(print_flags) {printf("%s, %d\n",__func__,__LINE__);}
+
+    if(mappages(pagetable, va, PGSIZE, pa, PTE_W|PTE_X|PTE_R|PTE_U) != 0){
+      kfree((void *)pa);
+      return 0;
+    }
+//    if(print_flags) {printf("%s, %d, va is %p, p->sz is %p, pa is %p\n",__func__,__LINE__, va, p->sz, pa);}
+    return pa;
+  }
+//  if(print_flags) {printf("%s, %d\n",__func__,__LINE__);}
+  return 0;
 }
 
 // add a mapping to the kernel page table.
@@ -291,6 +343,7 @@ freewalk(pagetable_t pagetable)
       freewalk((pagetable_t)child);
       pagetable[i] = 0;
     } else if(pte & PTE_V){
+      printf("pa is %p\n", PTE2PA(pte));
       panic("freewalk: leaf");
     }
   }
@@ -367,11 +420,16 @@ uvmclear(pagetable_t pagetable, uint64 va)
 int
 copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len)
 {
-  uint64 n, va0, pa0;
-
+  uint64 n, va0, pa0, flags = 0;
+#if 0
+  if(dstva == 0x0000000000010FFF){
+    printf("copyout dstva is %p, va0 is %p, len is %p\n", dstva, PGROUNDDOWN(dstva), len);
+    flags = 1;
+  }
+#endif
   while(len > 0){
     va0 = PGROUNDDOWN(dstva);
-    pa0 = walkaddr(pagetable, va0);
+    pa0 = page_fault_walkaddr(pagetable, va0, flags);
     if(pa0 == 0)
       return -1;
     n = PGSIZE - (dstva - va0);
@@ -392,11 +450,16 @@ copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len)
 int
 copyin(pagetable_t pagetable, char *dst, uint64 srcva, uint64 len)
 {
-  uint64 n, va0, pa0;
-
+  uint64 n, va0, pa0, flags = 0;
+#if 0
+  if(srcva == 0x0000000000010FFF){
+    printf("copyin srcva is %p\n", srcva);
+    flags = 1;
+  }
+#endif
   while(len > 0){
     va0 = PGROUNDDOWN(srcva);
-    pa0 = walkaddr(pagetable, va0);
+    pa0 = page_fault_walkaddr(pagetable, va0, flags);
     if(pa0 == 0)
       return -1;
     n = PGSIZE - (srcva - va0);
