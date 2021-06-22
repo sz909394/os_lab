@@ -73,7 +73,7 @@ usertrap(void)
     if(r_scause() == 13 || r_scause() == 15)
     {
       uint64 va = r_stval();
-      uint64 sp_base = PGROUNDDOWN(r_sp());
+      uint64 sp_base = PGROUNDDOWN(p->trapframe->sp);
       uint64 sp_guard_base = sp_base - PGSIZE;
 
       if((sp_guard_base <= va) && (va < sp_base)){}
@@ -94,8 +94,8 @@ usertrap(void)
     }
 
     if(page_fault_handle != 1){
-      printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
-      printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
+//      printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
+//      printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
       p->killed = 1;
     }
   }
@@ -180,6 +180,7 @@ kerneltrap()
       uint64 sp_base = PGROUNDDOWN(p->trapframe->sp);
       uint64 sp_guard_base = sp_base - PGSIZE;
 
+      printf("\nkerneltrap page fault\n");
       if((sp_guard_base <= va) && (va < sp_base)){}
       else{
         if(va <= p->sz){
