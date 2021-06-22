@@ -171,6 +171,7 @@ kerneltrap()
     panic("kerneltrap: interrupts enabled");
 
   if((which_dev = devintr()) == 0){
+#if 0
     struct proc *p = myproc();
     int k_page_fault_handle = 0;
 
@@ -199,10 +200,11 @@ kerneltrap()
     }
 
     if(k_page_fault_handle != 1){
+#endif
       printf("scause %p\n", scause);
       printf("sepc=%p stval=%p\n", r_sepc(), r_stval());
       panic("kerneltrap");
-    }
+//    }
   }
 
   // give up the CPU if this is a timer interrupt.
