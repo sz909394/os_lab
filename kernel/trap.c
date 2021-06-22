@@ -78,7 +78,7 @@ usertrap(void)
 
       if((sp_guard_base <= va) && (va < sp_base)){}
       else{
-        if(va <= p->sz){
+        if(va < p->sz){
           uint64 va_align_down = PGROUNDDOWN(va);
           char *mem = kalloc();
           if(mem != 0)
@@ -183,7 +183,7 @@ kerneltrap()
       printf("\nkerneltrap page fault\n");
       if((sp_guard_base <= va) && (va < sp_base)){}
       else{
-        if(va <= p->sz){
+        if(va < p->sz){
           uint64 va_align_down = PGROUNDDOWN(va);
           char *mem = kalloc();
           if(mem != 0)
