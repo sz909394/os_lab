@@ -123,43 +123,31 @@ page_fault_walkaddr(pagetable_t pagetable, uint64 va, uint64 print_flags)
   if(va >= MAXVA)
     return 0;
 
-//  if(print_flags) {printf("%s, %d, va is %p\n",__func__,__LINE__, va);}
-
   pte = walk(pagetable, va, 0);
   if((pte != 0) && (*pte & PTE_V) != 0)
   {
-//    if(print_flags) {printf("%s, %d\n",__func__,__LINE__);}
     if((*pte & PTE_U) == 0)
      return 0;
-//    if(print_flags) {printf("%s, %d\n",__func__,__LINE__);}
     pa = PTE2PA(*pte);
     return pa;
   }
-//  if((pte == 0) || (*pte & PTE_V) == 0)){
   else{
-//    if(print_flags) {printf("%s, %d\n",__func__,__LINE__);}
     uint64 sp_base = PGROUNDDOWN(p->trapframe->sp);
     uint64 sp_guard_base = sp_base - PGSIZE;
     
     if((sp_guard_base <= va) && (va < sp_base)) { return 0; }
     if(va >= p->sz) { return 0; }
-    
-//    if(print_flags) {printf("%s, %d\n",__func__,__LINE__);}
+
     pa = (uint64) kalloc();
     if(pa == 0)
       return 0;
     memset((void *)pa, 0, PGSIZE);
-
-//    if(print_flags) {printf("%s, %d\n",__func__,__LINE__);}
-
     if(mappages(pagetable, va, PGSIZE, pa, PTE_W|PTE_X|PTE_R|PTE_U) != 0){
       kfree((void *)pa);
       return 0;
     }
-//    if(print_flags) {printf("%s, %d, va is %p, p->sz is %p, pa is %p\n",__func__,__LINE__, va, p->sz, pa);}
     return pa;
   }
-//  if(print_flags) {printf("%s, %d\n",__func__,__LINE__);}
   return 0;
 }
 
