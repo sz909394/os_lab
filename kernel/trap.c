@@ -68,9 +68,40 @@ usertrap(void)
   } else if((which_dev = devintr()) != 0){
     // ok
   } else {
-    printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
-    printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
-    p->killed = 1;
+    int page_fault_ocw_handle = 0;
+
+    if((r_scause() == 13) || (r_scause() == 15))
+    {
+      uint64 va = PGROUNDDOWN(r_stval());
+      pte_t *pte = walk(p->pagetable, va, 0);
+
+      if((pte !=0 ) && ((*pte & PTE_RSW) != 0))
+      {
+        char *mem;
+        uint flags = PTE_FLAGS(*pte);
+        uint64 pa = PTE2PA(*pte);
+
+        if((mem = kalloc()) != 0)
+        {
+          memmove(mem, (char*)pa, PGSIZE);
+          // 我需要有个方法来减少对这个 pa 的引用, 到那个时候再考虑 uvmunmap(x, x, x, 1);
+          uvmunmap(p->pagetable, va, 1, 0);
+          flags |= PTE_W;
+          flags &= ~PTE_RSW;
+          if(mappages(p->pagetable, va, PGSIZE, (uint64)mem, flags) != 0){
+            kfree(mem);
+          }
+          else { page_fault_ocw_handle = 1; }
+        }
+      }
+    }
+
+    if(page_fault_ocw_handle == 0)
+    {
+      printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
+      printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
+      p->killed = 1;
+    }
   }
 
   if(p->killed)
