@@ -3,6 +3,8 @@
 #include "memlayout.h"
 #include "elf.h"
 #include "riscv.h"
+#include "spinlock.h"
+#include "proc.h"
 #include "defs.h"
 #include "fs.h"
 
@@ -345,6 +347,48 @@ uvmclear(pagetable_t pagetable, uint64 va)
   *pte &= ~PTE_U;
 }
 
+uint64
+page_fault_cow_walkaddr(pagetable_t pagetable, uint64 va)
+{
+  pte_t *pte;
+  uint64 pa;
+  struct proc *p = myproc();
+
+  if(va >= MAXVA)
+    return 0;
+
+  pte = walk(pagetable, va, 0);
+  if(pte == 0)
+    return 0;
+  if((*pte & PTE_V) == 0)
+    return 0;
+  if((*pte & PTE_U) == 0)
+    return 0;
+  if((*pte & PTE_RSW) == 0){
+    pa = PTE2PA(*pte);
+    return pa;
+  }
+  else{
+    char *mem;
+    uint flags = PTE_FLAGS(*pte);
+    pa = PTE2PA(*pte);
+    mem = kalloc();
+    if(mem == 0)
+      return 0;
+    memmove(mem, (char*)pa, PGSIZE);
+    // 我需要有个方法来减少对这个 pa 的引用, 到那个时候再考虑 uvmunmap(x, x, x, 1);
+    uvmunmap(p->pagetable, va, 1, 0);
+    flags |= PTE_W;
+    flags &= ~PTE_RSW;
+    if(mappages(p->pagetable, va, PGSIZE, (uint64)mem, flags) != 0){
+      kfree(mem);
+      return 0;
+    }
+    return (uint64)mem;
+  }
+  return 0;
+}
+
 // Copy from kernel to user.
 // Copy len bytes from src to virtual address dstva in a given page table.
 // Return 0 on success, -1 on error.
@@ -355,7 +399,7 @@ copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len)
 
   while(len > 0){
     va0 = PGROUNDDOWN(dstva);
-    pa0 = walkaddr(pagetable, va0);
+    pa0 = page_fault_cow_walkaddr(pagetable, va0);
     if(pa0 == 0)
       return -1;
     n = PGSIZE - (dstva - va0);
