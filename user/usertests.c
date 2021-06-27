@@ -2682,9 +2682,12 @@ main(int argc, char *argv[])
     void (*f)(char *);
     char *s;
   } tests[] = {
+#if 0
     {execout, "execout"},
     {copyin, "copyin"},
+#endif
     {copyout, "copyout"},
+#if 0
     {copyinstr1, "copyinstr1"},
     {copyinstr2, "copyinstr2"},
     {copyinstr3, "copyinstr3"},
@@ -2740,6 +2743,7 @@ main(int argc, char *argv[])
     {iref, "iref"},
     {forktest, "forktest"},
     {bigdir, "bigdir"}, // slow
+#endif
     { 0, 0},
   };
 
