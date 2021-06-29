@@ -75,7 +75,7 @@ usertrap(void)
       uint64 va = PGROUNDDOWN(r_stval());
       pte_t *pte = walk(p->pagetable, va, 0);
 
-      if((pte !=0 ) && ((*pte & PTE_RSW) != 0))
+      if((pte !=0 ) && ((*pte & PTE_COW) != 0))
       {
         char *mem;
         uint flags = PTE_FLAGS(*pte);
@@ -87,7 +87,7 @@ usertrap(void)
           // 我需要有个方法来减少对这个 pa 的引用, 到那个时候再考虑 uvmunmap(x, x, x, 1);
           uvmunmap(p->pagetable, va, 1, 0);
           flags |= PTE_W;
-          flags &= ~PTE_RSW;
+          flags &= ~PTE_COW;
           if(mappages(p->pagetable, va, PGSIZE, (uint64)mem, flags) != 0){
             kfree(mem);
           }

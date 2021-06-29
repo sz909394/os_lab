@@ -321,7 +321,7 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
       panic("uvmcopy: page not present");
     pa = PTE2PA(*pte);
     *pte &= ~PTE_W;
-    *pte |= PTE_RSW;
+    *pte |= PTE_COW;
     flags = PTE_FLAGS(*pte);
     if(mappages(new, i, PGSIZE, (uint64)pa, flags) != 0){
       goto err;
@@ -364,7 +364,7 @@ page_fault_cow_walkaddr(pagetable_t pagetable, uint64 va)
     return 0;
   if((*pte & PTE_U) == 0)
     return 0;
-  if((*pte & PTE_RSW) == 0){
+  if((*pte & PTE_COW) == 0){
     pa = PTE2PA(*pte);
     return pa;
   }
@@ -379,7 +379,7 @@ page_fault_cow_walkaddr(pagetable_t pagetable, uint64 va)
     // 我需要有个方法来减少对这个 pa 的引用, 到那个时候再考虑 uvmunmap(x, x, x, 1);
     uvmunmap(p->pagetable, va, 1, 0);
     flags |= PTE_W;
-    flags &= ~PTE_RSW;
+    flags &= ~PTE_COW;
     if(mappages(p->pagetable, va, PGSIZE, (uint64)mem, flags) != 0){
       kfree(mem);
       return 0;
