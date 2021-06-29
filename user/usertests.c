@@ -2682,12 +2682,12 @@ main(int argc, char *argv[])
     void (*f)(char *);
     char *s;
   } tests[] = {
-#if 0
+#if 1
     {execout, "execout"},
     {copyin, "copyin"},
 #endif
     {copyout, "copyout"},
-#if 0
+#if 1
     {copyinstr1, "copyinstr1"},
     {copyinstr2, "copyinstr2"},
     {copyinstr3, "copyinstr3"},

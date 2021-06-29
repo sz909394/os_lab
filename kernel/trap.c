@@ -85,7 +85,7 @@ usertrap(void)
         {
           memmove(mem, (char*)pa, PGSIZE);
           // 我需要有个方法来减少对这个 pa 的引用, 到那个时候再考虑 uvmunmap(x, x, x, 1);
-          uvmunmap(p->pagetable, va, 1, 0);
+          uvmunmap(p->pagetable, va, 1, 1); // 通过 kfree 来减少一次引用
           flags |= PTE_W;
           flags &= ~PTE_COW;
           if(mappages(p->pagetable, va, PGSIZE, (uint64)mem, flags) != 0){
