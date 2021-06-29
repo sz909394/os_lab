@@ -70,7 +70,7 @@ usertrap(void)
   } else {
     int page_fault_ocw_handle = 0;
 
-    if((r_scause() == 13) || (r_scause() == 15))
+    if(r_scause() == 15)
     {
       uint64 va = PGROUNDDOWN(r_stval());
       pte_t *pte = walk(p->pagetable, va, 0);
@@ -88,10 +88,8 @@ usertrap(void)
           uvmunmap(p->pagetable, va, 1, 1); // 通过 kfree 来减少一次引用
           flags |= PTE_W;
           flags &= ~PTE_COW;
-          if(mappages(p->pagetable, va, PGSIZE, (uint64)mem, flags) != 0){
-            kfree(mem);
-          }
-          else { page_fault_ocw_handle = 1; }
+          *pte = PA2PTE((uint64)mem) | flags;
+          page_fault_ocw_handle = 1;
         }
       }
     }

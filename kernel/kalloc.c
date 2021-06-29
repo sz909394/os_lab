@@ -28,7 +28,7 @@ struct {
   int ref[PHYSTOP/PGSIZE];
 } page_ref;
 
-// op: 0 -> read, 1 -> inc, 2-> dec, other -> unknown op
+// op: 0 -> dec then read, 1 -> inc, other -> unknown op
 int
 page_ref_op(int op, uint64 pa)
 {
@@ -36,13 +36,11 @@ page_ref_op(int op, uint64 pa)
   acquire(&page_ref.lock);
   switch(op){
     case 0:
+      page_ref.ref[pa/PGSIZE] -= 1;
       value = page_ref.ref[pa/PGSIZE];
       break;
     case 1:
       page_ref.ref[pa/PGSIZE] += 1;
-      break;
-    case 2:
-      page_ref.ref[pa/PGSIZE] -= 1;
       break;
     default:
       panic("page_ref_op, unknown op");
@@ -83,7 +81,6 @@ kfree(void *pa)
   if(((uint64)pa % PGSIZE) != 0 || (char*)pa < end || (uint64)pa >= PHYSTOP)
     panic("kfree");
 
-  page_ref_op(2, (uint64)pa);
   if(page_ref_op(0, (uint64)pa) == 0){
     // Fill with junk to catch dangling refs.
     memset(pa, 1, PGSIZE);

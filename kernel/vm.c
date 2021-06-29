@@ -383,10 +383,7 @@ page_fault_cow_walkaddr(pagetable_t pagetable, uint64 va)
     uvmunmap(p->pagetable, va, 1, 1); // 通过 kfree 来减少一次引用
     flags |= PTE_W;
     flags &= ~PTE_COW;
-    if(mappages(p->pagetable, va, PGSIZE, (uint64)mem, flags) != 0){
-      kfree(mem);
-      return 0;
-    }
+    *pte = PA2PTE((uint64)mem) | flags;
     return (uint64)mem;
   }
   return 0;
