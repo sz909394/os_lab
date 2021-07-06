@@ -14,6 +14,7 @@ struct entry {
   struct entry *next;
 };
 struct entry *table[NBUCKET];
+pthread_mutex_t lock;
 int keys[NKEYS];
 int nthread = 1;
 
@@ -24,15 +25,27 @@ now()
  gettimeofday(&tv, 0);
  return tv.tv_sec + tv.tv_usec / 1000000.0;
 }
-
+#if 0
 static void 
 insert(int key, int value, struct entry **p, struct entry *n)
 {
-  struct entry *e = malloc(sizeof(struct entry));
-  e->key = key;
-  e->value = value;
+  pthread_mutex_lock(&lock);
   e->next = n;
   *p = e;
+  pthread_mutex_unlock(&lock);
+}
+#endif
+static void
+insert(struct entry *e, int index)
+{
+  struct entry **p;
+  struct entry *n;
+  pthread_mutex_lock(&lock);
+  p = &table[index];
+  n = table[index];
+  e->next = n;
+  *p = e;
+  pthread_mutex_unlock(&lock);
 }
 
 static 
@@ -51,7 +64,10 @@ void put(int key, int value)
     e->value = value;
   } else {
     // the new is new.
-    insert(key, value, &table[i], table[i]);
+    struct entry *e = malloc(sizeof(struct entry));
+    e->key = key;
+    e->value = value;
+    insert(e, i);
   }
 }
 
@@ -107,6 +123,7 @@ main(int argc, char *argv[])
     fprintf(stderr, "Usage: %s nthreads\n", argv[0]);
     exit(-1);
   }
+  pthread_mutex_init(&lock, NULL);
   nthread = atoi(argv[1]);
   tha = malloc(sizeof(pthread_t) * nthread);
   srandom(0);
