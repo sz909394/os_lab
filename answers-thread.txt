@@ -1,1 +1,12 @@
-hahaha
+Why are there missing keys with 2 threads, but not with 1 thread? Identify a sequence of events with 2
+threads that can lead to a key being missing. Submit your sequence with a short explanation in answers-
+thread.txt
+my answer:
+static void 
+insert(int key, int value, struct entry **p, struct entry *n)
+{
+  e->next = n;
+  *p = e;
+}
+
+两个线程同时运行，线程A和线程B 获取了相同的 entry， 线程A先运行完 insert, 线程B后运行 insert, 则线程B就会把线程A的给覆盖了.
