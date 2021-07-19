@@ -99,19 +99,30 @@ bget(uint dev, uint blockno)
   }
   else
   {
-
+    release(&bcache.lock_bucket[bucket_index]);
     acquire(&bcache.lock);
     for(int i = 0; i < NBUCKET; i++)
     {
-      if(bucket_index != i)
         acquire(&bcache.lock_bucket[i]);
     }
-
+    b = bcache.table[table_index][bucket_index];
+  if(b)
+  {
+    b->refcnt++;
+    b->bucket_lock = &bcache.lock_bucket[bucket_index];
+    for(int i = (NBUCKET - 1); i >= 0; i--)
+    {
+        release(&bcache.lock_bucket[i]);
+    }
+    release(&bcache.lock);
+    acquiresleep(&b->lock);
+    return b;
+  }
     for(int i = 0; i < NBUF; i++)
     {
       if(!b && bcache.buf[i].refcnt == 0)
         b = &bcache.buf[i];
-      else if((bcache.buf[i].refcnt == 0) && (bcache.buf[i].ticks_buf > b->ticks_buf))
+      else if( b && (bcache.buf[i].refcnt == 0) && (bcache.buf[i].ticks_buf >= b->ticks_buf))
         b = &bcache.buf[i];
     }
 
@@ -130,13 +141,11 @@ bget(uint dev, uint blockno)
       b->refcnt = 1;
       b->bucket_lock = &bcache.lock_bucket[bucket_index];
 
-    for(int i = 0; i < NBUCKET; i++)
+    for(int i = (NBUCKET - 1); i >= 0; i--)
     {
-      if(bucket_index != i)
         release(&bcache.lock_bucket[i]);
     }
       release(&bcache.lock);
-      release(&bcache.lock_bucket[bucket_index]);
       acquiresleep(&b->lock);
       return b;
     }
