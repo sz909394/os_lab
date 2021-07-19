@@ -13,7 +13,6 @@
 // * Only one process at a time can use a buffer,
 //     so do not keep them longer than necessary.
 
-
 #include "types.h"
 #include "param.h"
 #include "spinlock.h"
@@ -27,22 +26,22 @@
 #define table_size 1000
 extern uint ticks;
 
-struct {
+struct
+{
   struct spinlock lock;
   struct buf buf[NBUF];
   struct buf *table[table_size][NBUCKET];
   struct spinlock lock_bucket[NBUCKET];
 } bcache;
 
-void
-binit(void)
+void binit(void)
 {
   initlock(&bcache.lock, "bcache");
-  for(int i = 0; i < NBUCKET; i++)
+  for (int i = 0; i < NBUCKET; i++)
   {
     initlock(&bcache.lock_bucket[i], "bcache.bucket");
   }
-  for(int i = 0; i < NBUF; i++)
+  for (int i = 0; i < NBUF; i++)
   {
     initsleeplock(&bcache.buf[i].lock, "buffer");
     bcache.buf[i].buck_id = -1;
@@ -52,7 +51,7 @@ binit(void)
 // Look through buffer cache for block on device dev.
 // If not found, allocate a buffer.
 // In either case, return locked buffer.
-static struct buf*
+static struct buf *
 bget(uint dev, uint blockno)
 {
   struct buf *b = 0;
@@ -61,9 +60,10 @@ bget(uint dev, uint blockno)
 
   acquire(&bcache.lock_bucket[bucket_index]);
   b = bcache.table[table_index][bucket_index];
-  if(b)
+  if (b)
   {
-    if((b->dev != dev) || (b->blockno != blockno)){
+    if ((b->dev != dev) || (b->blockno != blockno))
+    {
       printf("b->dev is %d, b->blockno is %d\n", b->dev, b->blockno);
       printf("dev is %d, blockno is %d\n", dev, blockno);
       printf("bucket_index is %d, table_index is %d\n", bucket_index, table_index);
@@ -96,23 +96,22 @@ bget(uint dev, uint blockno)
       }
       release(&bcache.lock_bucket[bucket_index]);
     }
-    for(int i = 0; i < NBUCKET; i++)
+    for (int i = 0; i < NBUCKET; i++)
     {
       acquire(&bcache.lock_bucket[i]);
-      for(int j = 0; j < NBUF; j++)
+      for (int j = 0; j < NBUF; j++)
       {
-        if(bcache.buf[j].buck_id == -1)
+        if (bcache.buf[j].buck_id == -1)
         {
           b = &bcache.buf[j];
           break;
         }
-        if(!b && (bcache.buf[j].buck_id == i) && (bcache.buf[j].refcnt == 0))
+        if (!b && (bcache.buf[j].buck_id == i) && (bcache.buf[j].refcnt == 0))
           b = &bcache.buf[j];
-        else if( b && (bcache.buf[j].buck_id == i) \
-                       && (bcache.buf[j].refcnt == 0) && (bcache.buf[j].ticks_buf >= b->ticks_buf))
+        else if (b && (bcache.buf[j].buck_id == i) && (bcache.buf[j].refcnt == 0) && (bcache.buf[j].ticks_buf >= b->ticks_buf))
           b = &bcache.buf[j];
       }
-      if(b)
+      if (b)
       {
         if (b->buck_id != -1)
         {
@@ -120,11 +119,12 @@ bget(uint dev, uint blockno)
           int rm_table_index = b->blockno % table_size;
           if ((rm_bucket_index == bucket_index) && (rm_table_index == table_index))
             panic(" rm_bucket_index and bucket_index is the same");
-          if(rm_bucket_index != b->buck_id)
+          if (rm_bucket_index != b->buck_id)
             panic("rm_bucket_index is not the same as b->buck_id");
           bcache.table[rm_table_index][rm_bucket_index] = 0;
         }
-        if(i != bucket_index){
+        if (i != bucket_index)
+        {
           release(&bcache.lock_bucket[i]);
           acquire(&bcache.lock_bucket[bucket_index]);
         }
@@ -148,13 +148,14 @@ bget(uint dev, uint blockno)
 }
 
 // Return a locked buf with the contents of the indicated block.
-struct buf*
+struct buf *
 bread(uint dev, uint blockno)
 {
   struct buf *b;
 
   b = bget(dev, blockno);
-  if(!b->valid) {
+  if (!b->valid)
+  {
     virtio_disk_rw(b, 0);
     b->valid = 1;
   }
@@ -162,44 +163,41 @@ bread(uint dev, uint blockno)
 }
 
 // Write b's contents to disk.  Must be locked.
-void
-bwrite(struct buf *b)
+void bwrite(struct buf *b)
 {
-  if(!holdingsleep(&b->lock))
+  if (!holdingsleep(&b->lock))
     panic("bwrite");
   virtio_disk_rw(b, 1);
 }
 
 // Release a locked buffer.
 // Move to the head of the most-recently-used list.
-void
-brelse(struct buf *b)
+void brelse(struct buf *b)
 {
-  if(!holdingsleep(&b->lock))
+  if (!holdingsleep(&b->lock))
     panic("brelse");
 
   releasesleep(&b->lock);
 
   acquire(b->bucket_lock);
-  if(b->refcnt == 0)
+  if (b->refcnt == 0)
     panic("brelse, refcnt is already 0");
   b->refcnt--;
-  if(b->refcnt == 0)
+  if (b->refcnt == 0)
     b->ticks_buf = ticks;
   release(b->bucket_lock);
 }
 
-void
-bpin(struct buf *b) {
+void bpin(struct buf *b)
+{
   acquire(b->bucket_lock);
   b->refcnt++;
   release(b->bucket_lock);
 }
 
-void
-bunpin(struct buf *b) {
+void bunpin(struct buf *b)
+{
   acquire(b->bucket_lock);
   b->refcnt--;
   release(b->bucket_lock);
 }
-
