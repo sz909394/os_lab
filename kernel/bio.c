@@ -119,6 +119,8 @@ bget(uint dev, uint blockno)
     {
       int rm_bucket_index = b->blockno % NBUCKET;
       int rm_table_index = b->blockno % table_size;
+      if((rm_bucket_index == bucket_index) && (rm_table_index == table_index))
+        panic(" rm_bucket_index and bucket_index is the same");
       bcache.table[rm_table_index][rm_bucket_index] = 0;
 
       bcache.table[table_index][bucket_index] = b;
@@ -133,7 +135,6 @@ bget(uint dev, uint blockno)
       if(bucket_index != i)
         release(&bcache.lock_bucket[i]);
     }
-
       release(&bcache.lock);
       release(&bcache.lock_bucket[bucket_index]);
       acquiresleep(&b->lock);
