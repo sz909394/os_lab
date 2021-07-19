@@ -215,7 +215,8 @@ brelse(struct buf *b)
   if(b->refcnt == 0)
     panic("brelse, refcnt is already 0");
   b->refcnt--;
-  b->ticks_buf = ticks;
+  if(b->refcnt == 0)
+    b->ticks_buf = ticks;
 //  release(&bcache.lock);
   release(b->bucket_lock);
 }
