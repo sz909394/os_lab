@@ -8,7 +8,7 @@ struct buf {
   uint refcnt;
   struct buf *prev; // LRU cache list
   struct buf *next;
-//  struct spinlock *bucket_lock;
+  struct spinlock *bucket_lock;
   uchar data[BSIZE];
 };
 
