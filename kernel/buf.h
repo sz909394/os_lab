@@ -10,5 +10,6 @@ struct buf {
   uchar data[BSIZE];
   uint ticks_buf;
   struct spinlock *bucket_lock;
+  int buck_id;
 };
 
