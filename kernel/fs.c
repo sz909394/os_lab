@@ -378,7 +378,7 @@ static uint
 bmap(struct inode *ip, uint bn)
 {
   uint addr, *a;
-  struct buf *bp;
+  struct buf *bp, *bp_second;
 
   if(bn < NDIRECT){
     if((addr = ip->addrs[bn]) == 0)
@@ -398,6 +398,31 @@ bmap(struct inode *ip, uint bn)
       log_write(bp);
     }
     brelse(bp);
+    return addr;
+  }
+  bn -= NINDIRECT;
+
+  if(bn < MAXFILE)
+  {
+    // Load double-indirect block, allocating if necessary.
+    if((addr = ip->addrs[NDIRECT+1]) == 0)
+      ip->addrs[NDIRECT+1] = addr = balloc(ip->dev);
+    bp = bread(ip->dev, addr);
+    a = (uint*)bp->data;
+
+    if((addr = a[bn/256]) == 0){
+      a[bn/256] = addr = balloc(ip->dev);
+      log_write(bp);
+    }
+    bp_second = bread(ip->dev, addr);
+    a = (uint*)bp_second->data;
+
+    if((addr = a[bn%256]) == 0){
+      a[bn%256] = addr = balloc(ip->dev);
+      log_write(bp_second);
+    }
+    brelse(bp);
+    brelse(bp_second);
     return addr;
   }
 
