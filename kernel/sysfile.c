@@ -314,6 +314,34 @@ sys_open(void)
       end_op();
       return -1;
     }
+    {
+      int max_cycle = 0;
+      while ((ip->type == T_SYMLINK) && !(omode & O_NOFOLLOW) && (max_cycle < 10))
+      {
+        max_cycle++;
+        char target[MAXPATH];
+        struct inode *next;
+
+        memset(target, 0, sizeof(target));
+        if(readi(ip, 0, (uint64)target, 0, ip->size) != ip->size)
+          panic("create: symlink readi");
+        if ((next = namei(target)) == 0)
+        {
+          iunlockput(ip);
+          end_op();
+          return -1;
+        }
+        iunlockput(ip);
+        ip = next;
+        ilock(ip);
+      }
+      if(max_cycle >= 10)
+      {
+          iunlockput(ip);
+          end_op();
+          return -1;
+      }
+    }
   }
 
   if(ip->type == T_DEVICE && (ip->major < 0 || ip->major >= NDEV)){
@@ -382,6 +410,28 @@ sys_mknod(void)
     end_op();
     return -1;
   }
+  iunlockput(ip);
+  end_op();
+  return 0;
+}
+
+uint64
+sys_symlink(void)
+{
+  struct inode *ip;
+  char path[MAXPATH];
+  char target[MAXPATH];
+
+  begin_op();
+  if((argstr(0, target, MAXPATH)) < 0 ||
+      argstr(1, path, MAXPATH) < 0 ||
+      (ip = create(path, T_SYMLINK, 0, 0)) == 0){
+        end_op();
+        return -1;
+      }
+  ip->size = strlen(target);
+  if(writei(ip, 0, (uint64)target, 0, ip->size) != ip->size)
+    panic("symlink: writei");
   iunlockput(ip);
   end_op();
   return 0;
