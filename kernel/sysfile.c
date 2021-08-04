@@ -252,7 +252,7 @@ create(char *path, short type, short major, short minor)
   if((ip = dirlookup(dp, name, 0)) != 0){
     iunlockput(dp);
     ilock(ip);
-    if(type == T_FILE && (ip->type == T_FILE || ip->type == T_DEVICE))
+    if(type == T_FILE && (ip->type == T_FILE || ip->type == T_DEVICE || ip->type == T_SYMLINK))
       return ip;
     iunlockput(ip);
     return 0;
@@ -302,6 +302,34 @@ sys_open(void)
     if(ip == 0){
       end_op();
       return -1;
+    }
+    {
+      int max_cycle = 0;
+      while ((ip->type == T_SYMLINK) && !(omode & O_NOFOLLOW) && (max_cycle < 10))
+      {
+        max_cycle++;
+        char target[MAXPATH];
+        struct inode *next;
+
+        memset(target, 0, sizeof(target));
+        if(readi(ip, 0, (uint64)target, 0, ip->size) != ip->size)
+          panic("create: symlink readi");
+        if ((next = create(target, T_FILE, 0, 0)) == 0)
+        {
+          iunlockput(ip);
+          end_op();
+          return -1;
+        }
+        iunlockput(ip);
+        ip = next;
+        ilock(ip);
+      }
+      if(max_cycle >= 10)
+      {
+        iunlockput(ip);
+        end_op();
+        return -1;
+      }
     }
   } else {
     if((ip = namei(path)) == 0){
