@@ -701,3 +701,37 @@ procdump(void)
     printf("\n");
   }
 }
+
+struct vma*
+proc_get_vma(struct proc *p)
+{
+  int i = 0;
+  for(i = 0; i < NVMA; i++)
+  {
+    if(p->vmatable[i].alloc == 0)
+      {
+        p->vmatable[i].alloc = 1;
+        return &(p->vmatable[i]);
+      }
+  }
+  return 0;
+}
+
+void
+proc_free_vma(struct vma *vma)
+{
+  vma->alloc = 0;
+}
+
+struct vma*
+proc_find_vma(struct proc *p, uint64 va)
+{
+  int i = 0;
+  for(i = 0; i < NVMA; i++)
+  {
+    if((p->vmatable[i].alloc == 1) && (va >= p->vmatable[i].addr) && \
+      (va < (p->vmatable[i].addr + p->vmatable[i].length)))
+      return &(p->vmatable[i]);
+  }
+  return 0;
+}

@@ -53,6 +53,20 @@ argraw(int n)
   return -1;
 }
 
+int
+arguint64(int n, uint64 *ip)
+{
+  *ip = argraw(n);
+  return 0;
+}
+
+int
+arguint(int n, uint *ip)
+{
+  *ip = argraw(n);
+  return 0;
+}
+
 // Fetch the nth 32-bit system call argument.
 int
 argint(int n, int *ip)

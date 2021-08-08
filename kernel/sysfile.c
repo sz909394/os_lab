@@ -484,11 +484,100 @@ sys_pipe(void)
   }
   return 0;
 }
+#ifdef GLOBAL_VMA
+#define NVMA 16
 
+struct vma_mmap {
+  struct file *file;
+  uint64  addr;
+  uint64  length;
+  int     prots;
+  int     flags;
+  int     offset;
+  int     alloc;
+};
+
+struct {
+  struct spinlock lock;
+  struct vma_mmap vma[NVMA];
+} vmatable;
+
+void
+vmatableinit(void)
+{
+  initlock(&vmatable.lock, "vmatable");
+}
+
+// Allocate a vma structure.
+struct vma_mmap*
+vmaalloc(void)
+{
+  struct vma_mmap *f;
+
+  acquire(&vmatable.lock);
+  for(f = vmatable.vma; f < vmatable.vma + NVMA; f++){
+    if(f->alloc == 0){
+      f->alloc = 1;
+      release(&vmatable.lock);
+      return f;
+    }
+  }
+  release(&vmatable.lock);
+  return 0;
+}
+
+void vmafree(struct vma_mmap *f)
+{
+  acquire(&vmatable.lock);
+  f->alloc = 0;
+  release(&vmatable.lock);
+}
+#endif
 uint64
 sys_mmap(void)
 {
-  return -1;
+  uint64 addr, length;
+  int prot, flags;
+  uint offset;
+  struct file *f;
+  int addr_vm;
+  struct vma *vma;
+  struct proc *p = myproc();
+
+  if(argaddr(0, &addr) < 0 || arguint64(1, &length) ||\
+      argint(2, &prot) < 0 || argint(3, &flags) ||\
+      argfd(4, 0, &f) < 0 || arguint(5, &offset) < 0)
+    return -1;
+  if(f == 0)
+    return -1;
+  ilock(f->ip);
+  if(offset >= f->ip->size){
+    iunlock(f->ip);
+    return -1;
+  }
+  iunlock(f->ip);
+  if((prot < 0) || (flags < 0))
+  {
+    printf("sys_map, prot or flags is negative\n");
+    return -1;
+  }
+  if((addr >= MAXVA) || (addr + length >= MAXVA))
+  {
+    printf("sys_map, addr or addr+length > MAXVA\n");
+    return -1;
+  }
+  f = filedup(f);
+  addr_vm = myproc()->sz;
+  myproc()->sz = myproc()->sz + length;
+  if((vma = proc_get_vma(p)) == 0)
+    panic("proc have no more vma");
+  vma->f = f;
+  vma->addr = addr_vm;
+  vma->flags = flags;
+  vma->prots = prot;
+  vma->length = length;
+  vma->offset = offset;
+  return addr_vm;
 }
 
 uint64
