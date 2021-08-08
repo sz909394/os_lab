@@ -85,12 +85,12 @@ usertrap(void)
       else{
         if(va < p->sz){
           uint64 va_align_down = PGROUNDDOWN(va);
+          vma = proc_find_vma(p, va);
           char *mem = kalloc();
-          if(mem != 0)
+          if(vma && (mem != 0))
           {
             uint offset = 0;
             memset(mem, 0, PGSIZE);
-            vma = proc_find_vma(p, va);
             offset = va_align_down - vma->addr;
             ilock(vma->f->ip);
 
