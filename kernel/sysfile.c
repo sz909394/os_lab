@@ -566,6 +566,9 @@ sys_mmap(void)
     printf("sys_map, addr or addr+length > MAXVA\n");
     return -1;
   }
+  if((f->writable == 0) && (prot & PROT_WRITE) && (flags != MAP_PRIVATE)){
+    return -1;
+  }
   f = filedup(f);
   addr_vm = myproc()->sz;
   myproc()->sz = myproc()->sz + length;
@@ -583,5 +586,49 @@ sys_mmap(void)
 uint64
 sys_munmap(void)
 {
-  return -1;
+  uint64 addr, length, addr_end;
+  struct vma *vma;
+  struct proc *p = myproc();
+
+  if(argaddr(0, &addr) < 0 || arguint64(1, &length) < 0)
+    return -1;
+
+  if((vma = proc_find_vma(p, addr)) == 0){
+    printf("we have not map this addr\n");
+    return -1;
+  }
+
+  if((addr + length) > (vma->addr + vma->length))
+    addr_end = vma->addr + vma->length;
+  else
+    addr_end = addr + length;
+
+  uint64 va_align_start = PGROUNDDOWN(addr);
+  uint64 va_align_end = PGROUNDUP(addr_end);
+  int npages = (va_align_end - va_align_start) / PGSIZE;
+  if((vma->f->writable == 1) && (vma->flags & MAP_SHARED))
+  {
+    int i = 0;
+    for(i = 0; i < npages; i++){
+      if(walkaddr(p->pagetable, (va_align_start+i*PGSIZE)) != 0)
+      {
+        if(filewrite(vma->f, (va_align_start+i*PGSIZE), PGSIZE) != PGSIZE)
+        {
+          panic("sys_munmap: filewrite addr");
+        }
+        uvmunmap(p->pagetable, (va_align_start+i*PGSIZE), 1, 1);
+      }
+    }
+  }
+  if((va_align_start <= vma->addr) && (va_align_end >= (vma->addr + vma->length))){
+    fileclose(vma->f);
+  }
+  if((va_align_start <= vma->addr) && (va_align_end < (vma->addr + vma->length))){
+    vma->addr = va_align_end;
+    vma->length = (vma->addr + vma->length) - va_align_end;
+  }
+  if(va_align_start > vma->addr){
+    vma->length = va_align_start - vma->addr;
+  }
+  return 0;
 }

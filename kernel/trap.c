@@ -105,7 +105,14 @@ usertrap(void)
               panic("usertrap mmap readi");
             }
             iunlock(vma->f->ip);
-            if(mappages(p->pagetable, va_align_down, PGSIZE, (uint64)mem, PTE_W|PTE_X|PTE_R|PTE_U) != 0){
+            uint flags = PTE_U;
+            if(vma->prots & PROT_READ)
+              flags |= PTE_R;
+            if(vma->prots & PROT_WRITE)
+              flags |= PTE_W;
+            if(vma->prots & PROT_EXEC)
+              flags |= PROT_EXEC;
+            if(mappages(p->pagetable, va_align_down, PGSIZE, (uint64)mem, flags) != 0){
               kfree(mem);
             }
             else { page_fault_handle = 1;}
