@@ -544,8 +544,8 @@ sys_mmap(void)
   struct vma *vma;
   struct proc *p = myproc();
 
-  if(argaddr(0, &addr) < 0 || arguint64(1, &length) ||\
-      argint(2, &prot) < 0 || argint(3, &flags) ||\
+  if(argaddr(0, &addr) < 0 || arguint64(1, &length) < 0 ||\
+      argint(2, &prot) < 0 || argint(3, &flags) < 0 ||\
       argfd(4, 0, &f) < 0 || arguint(5, &offset) < 0)
     return -1;
   if(f == 0)
