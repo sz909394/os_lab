@@ -586,7 +586,7 @@ sys_mmap(void)
 uint64
 sys_munmap(void)
 {
-  uint64 addr, length, addr_end;
+  uint64 addr, length, addr_end, old_end;
   struct vma *vma;
   struct proc *p = myproc();
 
@@ -598,11 +598,12 @@ sys_munmap(void)
     return -1;
   }
 
-  if((addr + length) > (vma->addr + vma->length))
-    addr_end = vma->addr + vma->length;
+  old_end = (vma->addr + vma->length);
+  if((addr + length) > old_end)
+    addr_end = old_end;
   else
     addr_end = addr + length;
-
+  
   uint64 va_align_start = PGROUNDDOWN(addr);
   uint64 va_align_end = PGROUNDUP(addr_end);
   int npages = (va_align_end - va_align_start) / PGSIZE;
@@ -620,12 +621,13 @@ sys_munmap(void)
       }
     }
   }
-  if((va_align_start <= vma->addr) && (va_align_end >= (vma->addr + vma->length))){
+  if((va_align_start <= vma->addr) && (va_align_end >= old_end)){
     fileclose(vma->f);
+    proc_free_vma(vma);
   }
-  if((va_align_start <= vma->addr) && (va_align_end < (vma->addr + vma->length))){
+  if((va_align_start <= vma->addr) && (va_align_end < old_end)){
     vma->addr = va_align_end;
-    vma->length = (vma->addr + vma->length) - va_align_end;
+    vma->length = (old_end - va_align_end);
   }
   if(va_align_start > vma->addr){
     vma->length = va_align_start - vma->addr;

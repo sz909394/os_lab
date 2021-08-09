@@ -109,6 +109,7 @@ int             either_copyin(void *dst, int user_src, uint64 src, uint64 len);
 void            procdump(void);
 struct vma*     proc_get_vma(struct proc *p);
 struct vma*     proc_find_vma(struct proc *p, uint64 va);
+void            proc_free_vma(struct vma *vma);
 
 // swtch.S
 void            swtch(struct context*, struct context*);
