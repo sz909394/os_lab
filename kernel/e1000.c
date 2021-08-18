@@ -20,6 +20,8 @@ static struct mbuf *rx_mbufs[RX_RING_SIZE];
 static volatile uint32 *regs;
 
 struct spinlock e1000_lock;
+struct spinlock e1000_tx_lock;
+struct spinlock e1000_rx_lock;
 
 // called by pci_init().
 // xregs is the memory address at which the
@@ -30,6 +32,8 @@ e1000_init(uint32 *xregs)
   int i;
 
   initlock(&e1000_lock, "e1000");
+  initlock(&e1000_tx_lock, "e1000_tx");
+  initlock(&e1000_rx_lock, "e1000_rx");
 
   regs = xregs;
 
@@ -102,8 +106,7 @@ e1000_transmit(struct mbuf *m)
   // the TX descriptor ring so that the e1000 sends it. Stash
   // a pointer so that it can be freed after sending.
   //
-  printf("%s\n",__func__);
-
+  acquire(&e1000_tx_lock);
   uint16 TDT = regs[E1000_TDT] & 0xffff;
   if(!(tx_ring[TDT].status & E1000_TXD_STAT_DD))
   {
@@ -117,6 +120,7 @@ e1000_transmit(struct mbuf *m)
   tx_ring[TDT].cmd |= E1000_TXD_CMD_EOP | E1000_TXD_CMD_RS;
   tx_mbufs[TDT] = m;
   regs[E1000_TDT] = (TDT + 1) % TX_RING_SIZE;
+  release(&e1000_tx_lock);
   return 0;
 }
 
@@ -129,22 +133,23 @@ e1000_recv(void)
   // Check for packets that have arrived from the e1000
   // Create and deliver an mbuf for each packet (using net_rx()).
   //
-  printf("%s\n",__func__);
-
   struct mbuf *m = 0;
+  acquire(&e1000_rx_lock);
   uint16 RDT = ((regs[E1000_RDT] & 0xffff) + 1) % RX_RING_SIZE;
-  if(!(rx_ring[RDT].status & E1000_RXD_STAT_DD))
+  while (rx_ring[RDT].status & E1000_RXD_STAT_DD)
   {
-    printf("No new packet is available\n");
-  }
-  rx_mbufs[RDT]->len = rx_ring[RDT].length;
-  net_rx(rx_mbufs[RDT]);
+    rx_mbufs[RDT]->len = rx_ring[RDT].length;
+    net_rx(rx_mbufs[RDT]);
 
-  if(!(m = mbufalloc(0)))
-    panic("e1000_recv, can not alloc mbuf");
-  rx_ring[RDT].addr = (uint64) m->head;
-  rx_ring[RDT].status = 0;
-  regs[E1000_RDT] = RDT;
+    if (!(m = mbufalloc(0)))
+      panic("e1000_recv, can not alloc mbuf");
+    rx_mbufs[RDT] = m;
+    rx_ring[RDT].addr = (uint64)m->head;
+    rx_ring[RDT].status = 0;
+    regs[E1000_RDT] = RDT;
+    RDT = ((regs[E1000_RDT] & 0xffff) + 1) % RX_RING_SIZE;
+  }
+  release(&e1000_rx_lock);
 }
 
 void
