@@ -111,14 +111,16 @@ e1000_transmit(struct mbuf *m)
   if(!(tx_ring[TDT].status & E1000_TXD_STAT_DD))
   {
     printf("transmit overflowing\n");
+    release(&e1000_tx_lock);
     return -1;
   }
   if(tx_mbufs[TDT])
     mbuffree(tx_mbufs[TDT]);
+  tx_mbufs[TDT] = m;
+  memset(&tx_ring[TDT], 0, sizeof(tx_ring[TDT]));
   tx_ring[TDT].addr = (uint64) m->head;
   tx_ring[TDT].length = m->len;
   tx_ring[TDT].cmd |= E1000_TXD_CMD_EOP | E1000_TXD_CMD_RS;
-  tx_mbufs[TDT] = m;
   regs[E1000_TDT] = (TDT + 1) % TX_RING_SIZE;
   release(&e1000_tx_lock);
   return 0;
@@ -134,6 +136,7 @@ e1000_recv(void)
   // Create and deliver an mbuf for each packet (using net_rx()).
   //
   struct mbuf *m = 0;
+
   acquire(&e1000_rx_lock);
   uint16 RDT = ((regs[E1000_RDT] & 0xffff) + 1) % RX_RING_SIZE;
   while (rx_ring[RDT].status & E1000_RXD_STAT_DD)
